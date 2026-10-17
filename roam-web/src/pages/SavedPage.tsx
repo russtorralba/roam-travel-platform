@@ -1,0 +1,19 @@
+import { Bookmark, Compass } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { PostCard } from '../components/content/PostCard'
+import { VlogCard } from '../components/content/VlogCard'
+import { useSaved } from '../context/useSaved'
+import { posts, vlogs } from '../data/mock-data'
+
+type Filter = 'All' | 'Photos' | 'Stories' | 'Vlogs'
+const filters: Filter[] = ['All', 'Photos', 'Stories', 'Vlogs']
+export function SavedPage() {
+  const [filter, setFilter] = useState<Filter>('All')
+  const { savedIds } = useSaved()
+  const savedPosts = useMemo(() => posts.filter(post => savedIds.has(`post:${post.id}`) && (filter === 'All' || filter === 'Photos' && post.kind === 'photo' || filter === 'Stories' && post.kind === 'story')), [filter, savedIds])
+  const savedVlogs = useMemo(() => vlogs.filter(vlog => savedIds.has(`vlog:${vlog.id}`) && (filter === 'All' || filter === 'Vlogs')), [filter, savedIds])
+  const count = savedPosts.length + savedVlogs.length
+
+  return <div className="mx-auto max-w-[1320px] px-4 py-8 md:px-8 md:py-12"><p className="text-xs font-bold uppercase tracking-[.16em] text-coast">Personal field archive</p><div className="mt-3 flex flex-wrap items-end justify-between gap-5"><div><h1 className="font-display text-4xl text-ocean md:text-6xl">Saved collections.</h1><p className="mt-4 max-w-xl text-sm leading-6 text-muted">Keep the field notes, places, and visual dispatches you want to return to. Saves are local to this browser session.</p></div><span className="rounded-full bg-mist px-4 py-2 text-xs font-bold text-ocean">{savedIds.size} saved · demo only</span></div><div className="mt-8 flex gap-2 overflow-x-auto border-b border-stone" role="tablist" aria-label="Saved content filters">{filters.map(item => <button key={item} role="tab" aria-selected={filter === item} onClick={() => setFilter(item)} className={`shrink-0 border-b-2 px-4 py-3 text-sm font-bold transition ${filter === item ? 'border-coast text-ocean' : 'border-transparent text-muted hover:text-ocean'}`}>{item}</button>)}</div>{count ? <div className="mt-8 space-y-12">{savedPosts.length > 0 && <section><div className="mb-5 flex items-center justify-between"><h2 className="font-display text-3xl text-ocean">{filter === 'Stories' ? 'Saved stories' : filter === 'Photos' ? 'Saved photos' : 'Saved dispatches'}</h2><span className="text-xs font-bold text-muted">Use the bookmark on a card to remove it</span></div><div className="grid gap-6 md:grid-cols-2">{savedPosts.map(post => <PostCard key={post.id} post={post} />)}</div></section>}{savedVlogs.length > 0 && <section><div className="mb-5 flex items-center justify-between"><h2 className="font-display text-3xl text-ocean">Saved vlogs</h2><span className="text-xs font-bold text-muted">{savedVlogs.length} reel{savedVlogs.length === 1 ? '' : 's'}</span></div><div className="grid gap-5 min-[480px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">{savedVlogs.map(vlog => <VlogCard key={vlog.id} vlog={vlog} />)}</div></section>}</div> : <section className="mt-8 grid min-h-85 place-items-center rounded-2xl border border-dashed border-stone bg-paper px-6 text-center"><div><span className="mx-auto grid size-12 place-items-center rounded-full bg-mist text-coast"><Bookmark className="size-5" /></span><h2 className="mt-5 font-display text-3xl text-ocean">Nothing saved in {filter === 'All' ? 'your archive' : `this ${filter.toLowerCase()} collection`}</h2><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted">Use any bookmark button in the feed, discovery, profile, or vlog archive to collect a dispatch here.</p><Link to="/explore" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-coast underline underline-offset-4"><Compass className="size-4" />Explore destinations</Link></div></section>}</div>
+}

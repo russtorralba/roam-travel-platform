@@ -1,0 +1,4 @@
+import { Compass } from 'lucide-react'
+import { Link } from 'react-router-dom'
+
+export function NotFoundPage() { return <section className="mx-auto grid min-h-[65vh] max-w-[1320px] place-items-center px-4 py-12 text-center md:px-8"><div className="max-w-md"><Compass className="mx-auto size-8 text-coast" /><p className="mt-5 text-xs font-bold uppercase tracking-[.16em] text-coast">ROAM field archive</p><h1 className="mt-3 font-display text-4xl text-ocean">This route is off the map.</h1><p className="mt-4 text-sm leading-6 text-muted">The page you requested is not available in the current prototype.</p><Link to="/" className="mt-6 inline-flex rounded text-sm font-bold text-coast underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ocean">Return home</Link></div></section> }
