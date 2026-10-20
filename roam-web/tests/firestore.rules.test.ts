@@ -52,6 +52,17 @@ describeWithEmulator('Firestore profile and username rules', () => {
     await assertFails(updateDoc(doc(owner, 'profiles/elena'), { username: 'stolen', updatedAt: serverTimestamp() }))
   })
 
+  it('denies a second user from overwriting an existing username reservation', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'profiles/first'), profile('first', 'first_roams', 'First'))
+      await setDoc(doc(db, 'usernames/first_roams'), reservation('first', 'first_roams'))
+    })
+
+    const second = testEnv.authenticatedContext('second').firestore()
+    await assertFails(setDoc(doc(second, 'usernames/first_roams'), reservation('second', 'first_roams')))
+  })
+
   it('permits the owner to update only their display name and denies unauthenticated reads', async () => {
     const owner = testEnv.authenticatedContext('elena').firestore()
     await assertSucceeds(updateDoc(doc(owner, 'profiles/elena'), { displayName: 'Elena R.', updatedAt: serverTimestamp() }))
