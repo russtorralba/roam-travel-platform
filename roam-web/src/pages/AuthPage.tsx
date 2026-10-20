@@ -4,15 +4,11 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { useAuth } from '../context/useAuth'
 import { authErrorMessage } from '../lib/auth-error-message'
-import { validateDisplayName, validatePassword, validateUsername } from '../lib/profile-validation'
+import { authFieldError, clearFieldErrorWhenValid, type AuthFormField, type AuthFormErrors } from '../lib/auth-form-validation'
 import { setupProfileRoute } from '../lib/setup-profile-route'
 
 type Mode = 'login' | 'signup' | 'forgot' | 'setup'
-type FormErrors = Partial<Record<'displayName' | 'username' | 'email' | 'password', string>>
-
-function validEmail(value: string) {
-  return /^\S+@\S+\.\S+$/.test(value.trim())
-}
+type FormErrors = AuthFormErrors
 
 export function AuthPage({ mode }: { mode: Mode }) {
   const navigate = useNavigate()
@@ -35,20 +31,26 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const validate = () => {
     const next: FormErrors = {}
     if (mode === 'signup' || mode === 'setup') {
-      const displayNameError = validateDisplayName(displayName)
-      const usernameError = validateUsername(username)
+      const displayNameError = authFieldError('displayName', displayName)
+      const usernameError = authFieldError('username', username)
       if (displayNameError) next.displayName = displayNameError
       if (usernameError) next.username = usernameError
     }
     if (mode !== 'setup') {
-      if (!validEmail(email)) next.email = 'Enter a valid email address.'
+      const emailError = authFieldError('email', email)
+      if (emailError) next.email = emailError
     }
     if (mode === 'signup' || mode === 'login') {
-      const passwordError = validatePassword(password)
+      const passwordError = authFieldError('password', password)
       if (passwordError) next.password = passwordError
     }
     setErrors(next)
     return Object.keys(next).length === 0
+  }
+
+  const updateField = (field: AuthFormField, value: string, setValue: (nextValue: string) => void) => {
+    setValue(value)
+    setErrors(current => clearFieldErrorWhenValid(current, field, value))
   }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -84,7 +86,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
     }
   }
 
-  return <div className="mx-auto grid min-h-[calc(100vh-10rem)] max-w-[1320px] place-items-center px-4 py-10 md:px-8"><section className="w-full max-w-lg rounded-2xl border border-stone/70 bg-paper p-5 shadow-sm sm:p-8"><Link to="/" className="inline-flex items-center gap-2 rounded text-sm font-bold text-ocean hover:text-coast focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-coast"><ArrowLeft className="size-4" />Return to the archive</Link><div className="mt-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-coast">ROAM account</p><h1 className="mt-3 font-display text-4xl text-ocean">{heading}</h1><p className="mt-3 text-sm leading-6 text-muted">{description}</p></div>{!isConfigured ? <p role="alert" className="mt-6 rounded-xl bg-[#fff0ec] px-4 py-3 text-sm leading-6 text-terracotta">{configurationError}</p> : <form onSubmit={submit} className="mt-7 grid gap-5">{(mode === 'signup' || mode === 'setup') && <><Field label="Display name" value={displayName} onChange={setDisplayName} error={errors.displayName} autoComplete="name" maxLength={60} /><Field label="Username" value={username} onChange={setUsername} error={errors.username} autoComplete="username" maxLength={20} hint="3–20 lowercase letters, numbers, or underscores" /></>}{mode !== 'setup' && <Field label="Email" value={email} onChange={setEmail} error={errors.email} autoComplete="email" type="email" icon={<Mail className="size-4" />} />}{(mode === 'signup' || mode === 'login') && <Field label="Password" value={password} onChange={setPassword} error={errors.password} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} type="password" icon={<KeyRound className="size-4" />} />}{notice && <p role="status" className="rounded-xl bg-mist px-4 py-3 text-sm leading-6 text-ocean">{notice}</p>}<Button type="submit" disabled={submitting}>{submitting ? 'Working…' : mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Send reset instructions' : mode === 'setup' ? 'Complete profile' : 'Log in'}</Button></form>}<div className="mt-6 border-t border-stone pt-5 text-sm text-muted">{mode === 'login' && <p>New to ROAM? <Link to="/signup" className="font-bold text-coast underline underline-offset-4">Create an account</Link></p>}{mode === 'signup' && <p>Already have an account? <Link to="/login" className="font-bold text-coast underline underline-offset-4">Log in</Link></p>}{mode === 'login' && <p className="mt-3"><Link to="/forgot-password" className="font-bold text-coast underline underline-offset-4">Forgot password?</Link></p>}{mode === 'forgot' && <p><Link to="/login" className="font-bold text-coast underline underline-offset-4">Back to log in</Link></p>}{mode === 'setup' && <p>Your account setup remains private until you finish it.</p>}</div></section></div>
+  return <div className="mx-auto grid min-h-[calc(100vh-10rem)] max-w-[1320px] place-items-center px-4 py-10 md:px-8"><section className="w-full max-w-lg rounded-2xl border border-stone/70 bg-paper p-5 shadow-sm sm:p-8"><Link to="/" className="inline-flex items-center gap-2 rounded text-sm font-bold text-ocean hover:text-coast focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-coast"><ArrowLeft className="size-4" />Return to the archive</Link><div className="mt-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-coast">ROAM account</p><h1 className="mt-3 font-display text-4xl text-ocean">{heading}</h1><p className="mt-3 text-sm leading-6 text-muted">{description}</p></div>{!isConfigured ? <p role="alert" className="mt-6 rounded-xl bg-[#fff0ec] px-4 py-3 text-sm leading-6 text-terracotta">{configurationError}</p> : <form onSubmit={submit} className="mt-7 grid gap-5">{(mode === 'signup' || mode === 'setup') && <><Field label="Display name" value={displayName} onChange={value => updateField('displayName', value, setDisplayName)} error={errors.displayName} autoComplete="name" maxLength={60} /><Field label="Username" value={username} onChange={value => updateField('username', value, setUsername)} error={errors.username} autoComplete="username" maxLength={20} hint="3–20 lowercase letters, numbers, or underscores" /></>}{mode !== 'setup' && <Field label="Email" value={email} onChange={value => updateField('email', value, setEmail)} error={errors.email} autoComplete="email" type="email" icon={<Mail className="size-4" />} />}{(mode === 'signup' || mode === 'login') && <Field label="Password" value={password} onChange={value => updateField('password', value, setPassword)} error={errors.password} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} type="password" icon={<KeyRound className="size-4" />} />}{notice && <p role="status" className="rounded-xl bg-mist px-4 py-3 text-sm leading-6 text-ocean">{notice}</p>}<Button type="submit" disabled={submitting}>{submitting ? 'Working…' : mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Send reset instructions' : mode === 'setup' ? 'Complete profile' : 'Log in'}</Button></form>}<div className="mt-6 border-t border-stone pt-5 text-sm text-muted">{mode === 'login' && <p>New to ROAM? <Link to="/signup" className="font-bold text-coast underline underline-offset-4">Create an account</Link></p>}{mode === 'signup' && <p>Already have an account? <Link to="/login" className="font-bold text-coast underline underline-offset-4">Log in</Link></p>}{mode === 'login' && <p className="mt-3"><Link to="/forgot-password" className="font-bold text-coast underline underline-offset-4">Forgot password?</Link></p>}{mode === 'forgot' && <p><Link to="/login" className="font-bold text-coast underline underline-offset-4">Back to log in</Link></p>}{mode === 'setup' && <p>Your account setup remains private until you finish it.</p>}</div></section></div>
 }
 
 function Field({ label, value, onChange, error, autoComplete, type = 'text', maxLength, hint, icon }: { label: string; value: string; onChange: (value: string) => void; error?: string; autoComplete: string; type?: string; maxLength?: number; hint?: string; icon?: React.ReactNode }) {
