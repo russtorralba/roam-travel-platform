@@ -4,7 +4,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { SavedProvider } from './context/SavedContext'
 import { NotificationProvider } from './context/NotificationContext'
 import { CurrentProfileProvider } from './context/CurrentProfileContext'
+import { AuthProvider } from './context/AuthContext'
 import './index.css'
 import App from './App.tsx'
 
-createRoot(document.getElementById('root')!).render(<StrictMode><BrowserRouter><SavedProvider><NotificationProvider><CurrentProfileProvider><App /></CurrentProfileProvider></NotificationProvider></SavedProvider></BrowserRouter></StrictMode>)
+createRoot(document.getElementById('root')!).render(<StrictMode><BrowserRouter><AuthProvider><SavedProvider><NotificationProvider><CurrentProfileProvider><App /></CurrentProfileProvider></NotificationProvider></SavedProvider></AuthProvider></BrowserRouter></StrictMode>)

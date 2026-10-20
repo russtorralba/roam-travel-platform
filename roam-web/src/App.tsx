@@ -11,6 +11,8 @@ import { SearchPage } from './pages/SearchPage'
 import { VlogsPage } from './pages/VlogsPage'
 import { VlogDetailPage } from './pages/VlogDetailPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { AuthPage } from './pages/AuthPage'
+import { AccountPage } from './pages/AccountPage'
 
 export default function App() { return <AppShell><Routes>
   <Route path="/" element={<HomeFeed />} />
@@ -23,5 +25,10 @@ export default function App() { return <AppShell><Routes>
   <Route path="/destinations/:destinationId" element={<DestinationDetailPage />} />
   <Route path="/saved" element={<SavedPage />} />
   <Route path="/search" element={<SearchPage />} />
+  <Route path="/login" element={<AuthPage mode="login" />} />
+  <Route path="/signup" element={<AuthPage mode="signup" />} />
+  <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
+  <Route path="/setup-profile" element={<AuthPage mode="setup" />} />
+  <Route path="/me" element={<AccountPage />} />
   <Route path="*" element={<NotFoundPage />} />
 </Routes></AppShell> }
