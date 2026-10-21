@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validUsername(username) {
+      return username is string && username.matches('^[a-z0-9_]{3,20}$');
+    }
+
+    function validProfileShape(profile, uid) {
+      return profile.keys().hasOnly(['uid', 'username', 'displayName', 'createdAt', 'updatedAt'])
+        && profile.keys().hasAll(['uid', 'username', 'displayName', 'createdAt', 'updatedAt'])
+        && profile.uid == uid
+        && validUsername(profile.username)
+        && profile.displayName is string
+        && profile.displayName.size() >= 1
+        && profile.displayName.size() <= 60;
+    }
+
+    function validNewProfile(profile, uid) {
+      return validProfileShape(profile, uid)
+        && profile.createdAt == request.time
+        && profile.updatedAt == request.time;
+    }
+
+    function validUpdatedProfile(profile, uid) {
+      return validProfileShape(profile, uid)
+        && profile.createdAt == resource.data.createdAt
+        && profile.updatedAt == request.time;
+    }
+
+    function matchingUsernameReservation(username, uid) {
+      return existsAfter(/databases/$(database)/documents/usernames/$(username))
+        && getAfter(/databases/$(database)/documents/usernames/$(username)).data.uid == uid
+        && getAfter(/databases/$(database)/documents/usernames/$(username)).data.username == username;
+    }
+
+    match /profiles/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && validNewProfile(request.resource.data, uid)
+        && matchingUsernameReservation(request.resource.data.username, uid);
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && validUpdatedProfile(request.resource.data, uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+        && matchingUsernameReservation(resource.data.username, uid);
+      allow delete: if false;
+    }
+
+    match /usernames/{username} {
+      allow read: if false;
+      allow create: if signedIn()
+        && validUsername(username)
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'createdAt'])
+        && request.resource.data.keys().hasAll(['uid', 'username', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username == username
+        && request.resource.data.createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username == username;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
