@@ -10,9 +10,11 @@ firebase@13.0.0
    └─ @grpc/grpc-js@1.9.16
 ```
 
-`npm audit` reports five findings in total (four high and one low), including
-development dependencies. `npm audit --omit=dev` reports four findings (three
-high and one low). The production audit is therefore not clean.
+`npm audit` reports five high-severity affected-package findings (five total),
+including development dependencies. `npm audit --omit=dev` reports four
+high-severity affected-package findings (four total). These aggregate package
+severity counts differ from the individual advisory severities below. The
+production audit is therefore not clean.
 
 The gRPC advisories in this chain are:
 
