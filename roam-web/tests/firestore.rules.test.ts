@@ -1,5 +1,5 @@
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -27,6 +27,17 @@ function draft(uid: string, overrides: Record<string, unknown> = {}) {
     status: 'draft',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    ...overrides,
+  }
+}
+
+function publishedJourney(uid: string, username: string, displayName: string, overrides: Record<string, unknown> = {}) {
+  return {
+    ...draft(uid),
+    status: 'published',
+    authorUsername: username,
+    authorDisplayName: displayName,
+    publishedAt: serverTimestamp(),
     ...overrides,
   }
 }
@@ -93,7 +104,7 @@ describeWithEmulator('Firestore profile and username rules', () => {
     const reference = doc(owner, 'drafts/owner-draft')
     await assertSucceeds(setDoc(reference, draft('draft-owner')))
     await assertSucceeds(getDoc(reference))
-    await assertSucceeds(getDocs(query(collection(owner, 'drafts'), where('ownerUid', '==', 'draft-owner'))))
+    await assertSucceeds(getDocs(query(collection(owner, 'drafts'), where('ownerUid', '==', 'draft-owner'), where('status', '==', 'draft'), orderBy('updatedAt', 'desc'))))
     await assertSucceeds(updateDoc(reference, { title: 'Morning tides, revised', updatedAt: serverTimestamp() }))
     await assertSucceeds(deleteDoc(reference))
   })
@@ -134,5 +145,117 @@ describeWithEmulator('Firestore profile and username rules', () => {
     await assertFails(updateDoc(reference, { createdAt: serverTimestamp(), updatedAt: serverTimestamp() }))
     await assertFails(updateDoc(reference, { status: 'published', updatedAt: serverTimestamp() }))
     await assertSucceeds(updateDoc(reference, { description: 'A private note, revised by its owner.', updatedAt: serverTimestamp() }))
+  })
+
+  it('allows anonymous reads only for published journeys and requires a published-only feed query', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'drafts/public-journey'), publishedJourney('public-owner', 'public_owner', 'Public Owner'))
+      await setDoc(doc(db, 'drafts/private-journey'), draft('private-owner'))
+    })
+    const anonymous = testEnv.unauthenticatedContext().firestore()
+
+    await assertSucceeds(getDoc(doc(anonymous, 'drafts/public-journey')))
+    await assertFails(getDoc(doc(anonymous, 'drafts/private-journey')))
+    await assertSucceeds(getDocs(query(collection(anonymous, 'drafts'), where('status', '==', 'published'), orderBy('publishedAt', 'desc'), limit(6))))
+    await assertFails(getDocs(collection(anonymous, 'drafts')))
+  })
+
+  it('permits only a verified owner with a matching profile snapshot to publish a draft', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'profiles/verified-owner'), profile('verified-owner', 'verified_owner', 'Verified Owner'))
+      await setDoc(doc(db, 'drafts/verified-draft'), draft('verified-owner'))
+      await setDoc(doc(db, 'profiles/unverified-owner'), profile('unverified-owner', 'unverified_owner', 'Unverified Owner'))
+      await setDoc(doc(db, 'drafts/unverified-draft'), draft('unverified-owner'))
+    })
+    const verified = testEnv.authenticatedContext('verified-owner', { email_verified: true }).firestore()
+    const unverified = testEnv.authenticatedContext('unverified-owner').firestore()
+
+    await assertSucceeds(updateDoc(doc(verified, 'drafts/verified-draft'), {
+      status: 'published',
+      authorUsername: 'verified_owner',
+      authorDisplayName: 'Verified Owner',
+      publishedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }))
+    await assertFails(updateDoc(doc(unverified, 'drafts/unverified-draft'), {
+      status: 'published',
+      authorUsername: 'unverified_owner',
+      authorDisplayName: 'Unverified Owner',
+      publishedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }))
+  })
+
+  it('lets only a verified owner edit or unpublish a published journey', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'profiles/published-owner'), profile('published-owner', 'published_owner', 'Published Owner'))
+      await setDoc(doc(db, 'drafts/published-journey'), publishedJourney('published-owner', 'published_owner', 'Published Owner'))
+    })
+    const owner = testEnv.authenticatedContext('published-owner', { email_verified: true }).firestore()
+    const unverifiedOwner = testEnv.authenticatedContext('published-owner').firestore()
+    const other = testEnv.authenticatedContext('other-verified', { email_verified: true }).firestore()
+    const anonymous = testEnv.unauthenticatedContext().firestore()
+    const reference = doc(owner, 'drafts/published-journey')
+
+    await assertSucceeds(getDocs(query(collection(owner, 'drafts'), where('ownerUid', '==', 'published-owner'), where('status', '==', 'published'), orderBy('updatedAt', 'desc'))))
+    await assertFails(updateDoc(doc(unverifiedOwner, 'drafts/published-journey'), { title: 'Unverified edit', updatedAt: serverTimestamp() }))
+    await assertSucceeds(updateDoc(reference, { title: 'A revised public journey', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(reference, { ownerUid: 'other-owner', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(reference, { createdAt: serverTimestamp(), updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(reference, { publishedAt: serverTimestamp(), updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(reference, { authorUsername: 'other_author', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(reference, { authorDisplayName: 'Forged Author', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(doc(other, 'drafts/published-journey'), { title: 'Not yours', updatedAt: serverTimestamp() }))
+    await assertFails(deleteDoc(doc(other, 'drafts/published-journey')))
+    await assertFails(updateDoc(doc(unverifiedOwner, 'drafts/published-journey'), {
+      status: 'draft',
+      authorUsername: deleteField(),
+      authorDisplayName: deleteField(),
+      publishedAt: deleteField(),
+      updatedAt: serverTimestamp(),
+    }))
+    await assertSucceeds(updateDoc(reference, {
+      status: 'draft',
+      authorUsername: deleteField(),
+      authorDisplayName: deleteField(),
+      publishedAt: deleteField(),
+      updatedAt: serverTimestamp(),
+    }))
+    await assertFails(getDoc(doc(anonymous, 'drafts/published-journey')))
+    const unpublished = await getDoc(reference)
+    expect(unpublished.data()).not.toHaveProperty('authorUsername')
+    expect(unpublished.data()).not.toHaveProperty('authorDisplayName')
+    expect(unpublished.data()).not.toHaveProperty('publishedAt')
+    const publicFeed = await getDocs(query(collection(anonymous, 'drafts'), where('status', '==', 'published'), orderBy('publishedAt', 'desc')))
+    expect(publicFeed.docs.some(snapshot => snapshot.id === 'published-journey')).toBe(false)
+  })
+
+  it('rejects forged author identities, direct published creates, and invalid public transitions', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'profiles/author-owner'), profile('author-owner', 'author_owner', 'Author Owner'))
+      await setDoc(doc(db, 'drafts/author-draft'), draft('author-owner'))
+    })
+    const owner = testEnv.authenticatedContext('author-owner', { email_verified: true }).firestore()
+
+    await assertFails(setDoc(doc(owner, 'drafts/direct-published-create'), publishedJourney('author-owner', 'author_owner', 'Author Owner')))
+    await assertFails(updateDoc(doc(owner, 'drafts/author-draft'), {
+      status: 'published',
+      authorUsername: 'someone_else',
+      authorDisplayName: 'Someone Else',
+      publishedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }))
+    await assertFails(updateDoc(doc(owner, 'drafts/author-draft'), {
+      status: 'published',
+      authorUsername: 'author_owner',
+      authorDisplayName: 'Author Owner',
+      publishedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      extraPublicField: 'not allowed',
+    }))
   })
 })

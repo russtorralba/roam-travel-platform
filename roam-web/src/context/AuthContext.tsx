@@ -140,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshVerification = useCallback(async () => {
     if (!firebaseServices?.auth.currentUser) return false
     await reload(firebaseServices.auth.currentUser)
+    await firebaseServices.auth.currentUser.getIdToken(true)
     setUser(firebaseServices.auth.currentUser)
     setIsEmailVerified(firebaseServices.auth.currentUser.emailVerified)
     return firebaseServices.auth.currentUser.emailVerified

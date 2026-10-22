@@ -13,10 +13,12 @@ import { VlogDetailPage } from './pages/VlogDetailPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { AuthPage } from './pages/AuthPage'
 import { AccountPage } from './pages/AccountPage'
+import { PublicJourneyDetailPage } from './pages/PublicJourneyDetailPage'
 
 export default function App() { return <AppShell><Routes>
   <Route path="/" element={<HomeFeed />} />
   <Route path="/explore" element={<ExplorePage />} />
+  <Route path="/journeys/:journeyId" element={<PublicJourneyDetailPage />} />
   <Route path="/vlogs" element={<VlogsPage />} />
   <Route path="/vlogs/:vlogId" element={<VlogDetailPage />} />
   <Route path="/create" element={<CreatePostPage />} />
