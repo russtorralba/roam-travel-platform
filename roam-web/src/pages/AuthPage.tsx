@@ -60,8 +60,12 @@ export function AuthPage({ mode }: { mode: Mode }) {
     setSubmitting(true)
     try {
       if (mode === 'signup') {
-        await signUp({ displayName, username, email, password })
-        navigate('/me')
+        const result = await signUp({ displayName, username, email, password })
+        navigate('/me', {
+          state: result.verificationEmailSent
+            ? undefined
+            : { registrationNotice: 'Your account is ready, but we could not send the verification email. You can resend it below.' },
+        })
       } else if (mode === 'login') {
         await signIn(email, password)
         navigate('/me')
