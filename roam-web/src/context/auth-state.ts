@@ -1,5 +1,6 @@
 import { createContext } from 'react'
 import type { User } from 'firebase/auth'
+import type { RegistrationResult } from '../lib/registration'
 import type { AuthProfile, ProfileSetupInput, SignUpInput } from '../types/auth'
 
 export type AuthContextValue = {
@@ -9,7 +10,7 @@ export type AuthContextValue = {
   isConfigured: boolean
   configurationError: string | null
   isEmailVerified: boolean
-  signUp: (input: SignUpInput) => Promise<void>
+  signUp: (input: SignUpInput) => Promise<RegistrationResult>
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   sendPasswordReset: (email: string) => Promise<void>

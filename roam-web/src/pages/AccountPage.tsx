@@ -1,12 +1,16 @@
 import { CheckCircle2, LogOut, MailCheck, RefreshCw, UserRound } from 'lucide-react'
 import { useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { useAuth } from '../context/useAuth'
 
 export function AccountPage() {
   const { user, profile, isLoading, isEmailVerified, resendVerification, refreshVerification, signOut } = useAuth()
-  const [notice, setNotice] = useState<string | null>(null)
+  const location = useLocation()
+  const registrationNotice = typeof location.state === 'object' && location.state && 'registrationNotice' in location.state && typeof location.state.registrationNotice === 'string'
+    ? location.state.registrationNotice
+    : null
+  const [notice, setNotice] = useState<string | null>(registrationNotice)
   if (isLoading) return <section className="mx-auto grid min-h-[60vh] max-w-[1320px] place-items-center px-4 text-center"><p className="text-sm font-semibold text-muted">Loading your ROAM account…</p></section>
   if (!user) return <Navigate to="/login" replace />
   if (!profile) return <Navigate to="/setup-profile" replace />

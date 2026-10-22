@@ -3,6 +3,7 @@ import { createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVe
 import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore'
 import { firebaseConfigurationError, firebaseServices } from '../lib/firebase'
 import { normalizeUsername, validateDisplayName, validateUsername } from '../lib/profile-validation'
+import { completeRegistration } from '../lib/registration'
 import type { AuthProfile, ProfileSetupInput, SignUpInput } from '../types/auth'
 import { AuthContext, type AuthContextValue } from './auth-state'
 
@@ -102,13 +103,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async ({ displayName, username, email, password }: SignUpInput) => {
     if (!firebaseServices) throw new Error(firebaseConfigurationError ?? 'Firebase is unavailable.')
-    const credential = await createUserWithEmailAndPassword(firebaseServices.auth, email.trim(), password)
-    try {
-      await completeProfile({ displayName, username })
-    } catch {
-      throw new ProfileSetupError()
-    }
-    await sendEmailVerification(credential.user, emailActionSettings())
+    const auth = firebaseServices.auth
+    return completeRegistration({
+      createAccount: () => createUserWithEmailAndPassword(auth, email.trim(), password).then(credential => credential.user),
+      completeProfile: async () => {
+        try {
+          await completeProfile({ displayName, username })
+        } catch {
+          throw new ProfileSetupError()
+        }
+      },
+      sendVerification: user => sendEmailVerification(user, emailActionSettings()),
+    })
   }, [completeProfile])
 
   const signIn = useCallback(async (email: string, password: string) => {
