@@ -42,6 +42,21 @@ function publishedJourney(uid: string, username: string, displayName: string, ov
   }
 }
 
+function publicProfile(overrides: Record<string, unknown> = {}) {
+  return {
+    username: 'public_owner',
+    displayName: 'Public Owner',
+    bio: 'A public field profile.',
+    locationLabel: 'Palawan',
+    interests: ['Coastlines', 'Slow travel'],
+    avatar: null,
+    visibility: 'public',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...overrides,
+  }
+}
+
 describeWithEmulator('Firestore profile and username rules', () => {
   beforeAll(async () => {
     const [host, port] = emulator!.split(':')
@@ -257,5 +272,68 @@ describeWithEmulator('Firestore profile and username rules', () => {
       updatedAt: serverTimestamp(),
       extraPublicField: 'not allowed',
     }))
+  })
+
+  it('allows anonymous reads of valid public profiles but denies listing and all direct writes', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), 'publicProfiles/public-owner'), publicProfile())
+    })
+    const anonymous = testEnv.unauthenticatedContext().firestore()
+    const signedIn = testEnv.authenticatedContext('public-owner').firestore()
+
+    await assertSucceeds(getDoc(doc(anonymous, 'publicProfiles/public-owner')))
+    await assertFails(getDocs(collection(anonymous, 'publicProfiles')))
+    await assertFails(getDocs(collection(signedIn, 'publicProfiles')))
+    await assertFails(setDoc(doc(anonymous, 'publicProfiles/new-profile'), publicProfile()))
+    await assertFails(setDoc(doc(signedIn, 'publicProfiles/new-profile'), publicProfile()))
+    await assertFails(setDoc(doc(signedIn, 'publicProfiles/public-owner'), publicProfile({ bio: 'Forged direct update.' })))
+    await assertFails(updateDoc(doc(signedIn, 'publicProfiles/public-owner'), { bio: 'Forged direct update.' }))
+    await assertFails(deleteDoc(doc(signedIn, 'publicProfiles/public-owner')))
+  })
+
+  it('denies public-profile reads for malformed, incomplete, unexpected, or non-public documents', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'publicProfiles/malformed'), publicProfile({ avatar: 'https://example.com/avatar.png' }))
+      await setDoc(doc(db, 'publicProfiles/not-public'), publicProfile({ visibility: 'private' }))
+      const { bio: _bio, ...missingRequired } = publicProfile()
+      await setDoc(doc(db, 'publicProfiles/missing-required'), missingRequired)
+      await setDoc(doc(db, 'publicProfiles/unexpected-field'), publicProfile({ privateEmail: 'private@example.test' }))
+      await setDoc(doc(db, 'publicProfiles/invalid-username'), publicProfile({ username: 'Not valid' }))
+      await setDoc(doc(db, 'publicProfiles/invalid-types'), publicProfile({ bio: 42, interests: 'not-a-list' }))
+      await setDoc(doc(db, 'publicProfiles/oversized-bio'), publicProfile({ bio: 'x'.repeat(501) }))
+      await setDoc(doc(db, 'publicProfiles/oversized-location'), publicProfile({ locationLabel: 'x'.repeat(81) }))
+      await setDoc(doc(db, 'publicProfiles/too-many-interests'), publicProfile({ interests: Array.from({ length: 9 }, (_, index) => `Interest ${index}`) }))
+      await setDoc(doc(db, 'publicProfiles/overlong-interest'), publicProfile({ interests: ['x'.repeat(41)] }))
+    })
+    const anonymous = testEnv.unauthenticatedContext().firestore()
+    for (const id of ['malformed', 'not-public', 'missing-required', 'unexpected-field', 'invalid-username', 'invalid-types', 'oversized-bio', 'oversized-location', 'too-many-interests', 'overlong-interest']) {
+      await assertFails(getDoc(doc(anonymous, 'publicProfiles', id)))
+    }
+  })
+
+  it('denies all client access to reports and moderation records', async () => {
+    const anonymous = testEnv.unauthenticatedContext().firestore()
+    const signedIn = testEnv.authenticatedContext('reporter').firestore()
+    for (const [collectionName, id] of [['reports', 'report-1'], ['moderationCases', 'case-1'], ['moderationActions', 'action-1']] as const) {
+      const path = `${collectionName}/${id}`
+      await assertFails(getDoc(doc(anonymous, path)))
+      await assertFails(getDoc(doc(signedIn, path)))
+      await assertFails(getDocs(collection(signedIn, collectionName)))
+      await assertFails(setDoc(doc(anonymous, path), { status: 'open' }))
+      await assertFails(setDoc(doc(signedIn, path), { status: 'open' }))
+    }
+  })
+
+  it('returns only published journeys for a public author query', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'drafts/author-public'), publishedJourney('author-owner', 'author_owner', 'Author Owner'))
+      await setDoc(doc(db, 'drafts/author-private'), draft('author-owner'))
+      await setDoc(doc(db, 'drafts/other-public'), publishedJourney('other-owner', 'other_owner', 'Other Owner'))
+    })
+    const anonymous = testEnv.unauthenticatedContext().firestore()
+    const snapshots = await assertSucceeds(getDocs(query(collection(anonymous, 'drafts'), where('ownerUid', '==', 'author-owner'), where('status', '==', 'published'), orderBy('publishedAt', 'desc'))))
+    expect(snapshots.docs.map(snapshot => snapshot.id)).toEqual(['author-public'])
   })
 })

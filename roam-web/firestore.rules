@@ -54,6 +54,40 @@ service cloud.firestore {
       return travelDate == '' || travelDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
 
+    function validPublicInterest(interest) {
+      return interest is string && interest.size() >= 1 && interest.size() <= 40;
+    }
+
+    function validPublicInterests(interests) {
+      return interests is list
+        && interests.size() <= 8
+        && (interests.size() < 1 || validPublicInterest(interests[0]))
+        && (interests.size() < 2 || validPublicInterest(interests[1]))
+        && (interests.size() < 3 || validPublicInterest(interests[2]))
+        && (interests.size() < 4 || validPublicInterest(interests[3]))
+        && (interests.size() < 5 || validPublicInterest(interests[4]))
+        && (interests.size() < 6 || validPublicInterest(interests[5]))
+        && (interests.size() < 7 || validPublicInterest(interests[6]))
+        && (interests.size() < 8 || validPublicInterest(interests[7]));
+    }
+
+    function validPublicProfile(profile) {
+      return profile.keys().hasOnly(['username', 'displayName', 'bio', 'locationLabel', 'interests', 'avatar', 'visibility', 'createdAt', 'updatedAt'])
+        && profile.keys().hasAll(['username', 'displayName', 'bio', 'interests', 'avatar', 'visibility', 'createdAt', 'updatedAt'])
+        && validUsername(profile.username)
+        && profile.displayName is string
+        && profile.displayName.size() >= 1
+        && profile.displayName.size() <= 60
+        && profile.bio is string
+        && profile.bio.size() <= 500
+        && (!('locationLabel' in profile) || (profile.locationLabel is string && profile.locationLabel.size() <= 80))
+        && validPublicInterests(profile.interests)
+        && profile.avatar == null
+        && profile.visibility == 'public'
+        && profile.createdAt is timestamp
+        && profile.updatedAt is timestamp;
+    }
+
     function emailVerified() {
       return signedIn() && request.auth.token.email_verified == true;
     }
@@ -181,6 +215,24 @@ service cloud.firestore {
       allow delete: if signedIn()
         && resource.data.ownerUid == request.auth.uid
         && (resource.data.status == 'draft' || emailVerified());
+    }
+
+    match /publicProfiles/{uid} {
+      allow get: if validPublicProfile(resource.data);
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    match /reports/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /moderationCases/{caseId} {
+      allow read, write: if false;
+    }
+
+    match /moderationActions/{actionId} {
+      allow read, write: if false;
     }
 
     match /{document=**} {
